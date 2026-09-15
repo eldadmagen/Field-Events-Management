@@ -1,102 +1,239 @@
-# ארכיטקטורה והחלטות עיצוב - Field Events Management
+# מסמך ארכיטקטורה - Field Events Management
 
-מסמך זה עונה במפורש על השאלות שהוגדרו בדרישות הפרויקט, ומסביר את הבחירות שנעשו והחלופות שנשקלו.
+מסמך זה ברמה עליונה, ומטרתו להציג את ההחלטות המרכזיות, גבולות האחריות בין הרכיבים, וההנמקה
+מאחורי הבחירות הטכנולוגיות. לפרטי מימוש מלאים - הקוד עצמו הוא מקור האמת (`src/`), ולהוראות הרצה -
+ראו [`README.md`](../README.md).
 
-## 1. ה-Agent
+## 1. תרשים ארכיטקטורה של כלל המערכת
 
-### ארכיטקטורת המימוש: .NET Worker Service (Generic Host + BackgroundService)
+```mermaid
+graph LR
+    subgraph External["מקורות חיצוניים"]
+        SRC1["חיישן (Sensor)"]
+        SRC2["דיווח ידני"]
+        SRC3["מערכת חיצונית נוספת"]
+    end
 
-ה-Agent (`src/FieldEvents.Agent`) בנוי כתהליך `Microsoft.NET.Sdk.Web` המריץ שני דברים באותו host:
-1. Minimal API (Kestrel) עם endpoint גנרי `POST /ingest/{sourceId}` שחושף את ה-Agent למקורות חיצוניים.
-2. `BackgroundService` (`OutboxForwarder`) שמחזיק את חיבור ה-SignalR לשרת ומרוקן את ה-outbox המקומי ברקע.
+    subgraph AgentBox["Agent - FieldEvents.Agent"]
+        Ingest["Ingest API<br/>POST /ingest/{sourceId}"]
+        Outbox[("Outbox מקומי<br/>SQLite")]
+        Forwarder["OutboxForwarder<br/>(BackgroundService)"]
+        Ingest --> Outbox
+        Outbox --> Forwarder
+    end
 
-**חלופות שנשקלו:**
+    subgraph ServerBox["Server - FieldEvents.Server"]
+        EventsHub["EventsHub<br/>(SignalR, Agent -> Server)"]
+        Logic["Domain: EventStateMachine<br/>Services: NotificationService"]
+        DB[("SQLite<br/>EF Core")]
+        ClientsHub["ClientsHub<br/>(SignalR, Server -> Clients)"]
+        API["REST API<br/>Controllers"]
+        EventsHub --> Logic --> DB
+        Logic --> ClientsHub
+        API --> DB
+    end
 
-| חלופה | הכרעה | נימוק |
+    subgraph ClientBox["Client - Angular"]
+        Dispatcher["Dispatcher UI"]
+        Technician["Technician UI"]
+    end
+
+    SRC1 -- "HTTP POST + X-Api-Key" --> Ingest
+    SRC2 -- "HTTP POST + X-Api-Key" --> Ingest
+    SRC3 -- "HTTP POST + X-Api-Key" --> Ingest
+
+    Forwarder -- "SignalR (wss), X-Agent-Key<br/>ReportEvent" --> EventsHub
+
+    ClientsHub -- "SignalR (wss), JWT<br/>NewEventReceived" --> Dispatcher
+    ClientsHub -. "SignalR (מחובר) / Web Push stub (מנותק)" .-> Technician
+    Dispatcher -- "REST + JWT" --> API
+    Technician -- "REST + JWT" --> API
+```
+
+**זרימת ה-Flow הנדרש (מודגש בתרשים):** מקור חיצוני → `Ingest API` → `Outbox` → `OutboxForwarder`
+→ `EventsHub` → `EventStateMachine`/DB → `ClientsHub` → `Dispatcher UI`.
+
+## 2. תיאור הרכיבים ותפקידם
+
+| רכיב | תפקיד | גבול אחריות |
 |---|---|---|
-| **Worker Service / Generic Host** (נבחר) | ✅ | תהליך רקע רציף, cross-platform (`UseWindowsService()`/`UseSystemd()` זמינים בלי לשנות קוד), DI/Config/Logging מובנים, יכול להריץ כמה background tasks במקביל (HTTP listener + drain loop) תחת host אחד. מתאים בול לדרישה "רץ ברציפות ברקע". |
-| Azure Functions / סביבה serverless | ❌ נדחה | מתאים לטריגרים קצרי-חיים; לא מתאים לחיבור SignalR מתמשך (stateful) ולא ל-state מקומי (outbox) שצריך לשרוד בין הפעלות. היה דורש ארכיטקטורה שונה לגמרי. |
-| Windows Service קלאסי (`System.ServiceProcess`) | ❌ נדחה | מודל ישן יותר. Worker Service הוא ה"יורש" המודרני שלו מעל Generic Host - אותה יכולת פריסה כ-Windows Service, אך עם ארכיטקטורה ניתנת לתחזוקה/הרחבה טוב יותר. |
+| **Agent** (`FieldEvents.Agent`) | נקודת הכניסה למקורות חיצוניים; מבטיח שאף אירוע לא יאבד עד שהשרת אישר קבלתו. | **לא** מחזיק לוגיקה עסקית (State Machine, הרשאות) - רק העברה אמינה. אחראי בלעדית על אימות המקורות ועל ה-retry/outbox. |
+| **Server** (`FieldEvents.Server`) | "מקור האמת" - הלוגיקה העסקית, ה-State Machine, ההרשאות, ה-DB, וההפצה בזמן אמת ללקוחות. | היחיד שכותב ל-DB המרכזי ומחליט אם מעבר סטטוס חוקי. לא יוזם קשר למקורות חיצוניים - רק מקבל מה-Agent. |
+| **Client** (`FieldEvents.Client`, Angular) | ממשק לסדרן ולטכנאי; מציג מידע ומאזין לעדכונים בזמן אמת. | לא אוכף הרשאות (זה תפקיד השרת) - רק מציג לפי מה שה-API/Hub מחזירים. |
+| **Outbox מקומי** (בתוך ה-Agent) | תור עמיד-לכשל בין קליטת האירוע להעברתו לשרת. | ייעודי ל-Agent בלבד, לא משותף עם ה-DB של השרת. |
+| **SignalR Hubs** (`EventsHub`, `ClientsHub`) | שני ערוצי real-time נפרדים בכוונה: אחד ל-Agent→Server, אחד ל-Server→Clients, עם סוגי אימות שונים לגמרי (ראו §6). | כל Hub אחראי רק על צד אחד של התקשורת - אין ערבוב בין "שירות פנימי" ל"משתמש קצה". |
 
-### חשיפה למקורות חיצוניים
+## 3. תיאור מפורט של ה-Agent
 
-`POST /ingest/{sourceId}` מקבל JSON בפורמט אחיד (`IncomingEventRequest`: כותרת, תיאור, מיקום, עדיפות). כל מקור מזוהה ב-URL (`sourceId`) ומאומת מול `X-Api-Key` (ראו "אימות מקורות" למטה).
+### איך מתקבלים אירועים
 
-### מנגנון תקשורת Agent ↔ Server: SignalR (WebSocket) client מתמיד
+ה-Agent חושף endpoint גנרי אחד לכל מקור: `POST /ingest/{sourceId}`, עם body בפורמט אחיד
+(`IncomingEventRequest`: כותרת, תיאור, מיקום, עדיפות) וכותרת `X-Api-Key`. `SourceRegistry` מאמת
+את המפתח מול רשימת מקורות רשומים ב-config - מקור לא מוכר/מפתח שגוי מקבל `401`.
 
-`OutboxForwarder` מחזיק `HubConnection` (חבילת `Microsoft.AspNetCore.SignalR.Client`) עם `WithAutomaticReconnect()` מול `EventsHub` בשרת, וקורא ל-`ReportEvent` על כל אירוע.
+### מה קורה ברגע הקבלה
 
-**יתרונות:** דו-כיווני (מאפשר בעתיד לשרת "לדבר" בחזרה ל-Agent, למשל לשלוח פקודות), reconnect מובנה, over TLS, latency נמוך - אין overhead של HTTP handshake לכל הודעה כי החיבור כבר פתוח. מתאים בדיוק לדרישה "הודעות קצרות בזמן אמת".
+```mermaid
+sequenceDiagram
+    participant Src as מקור חיצוני
+    participant Agent as Agent (Ingest API)
+    participant Outbox as Outbox (SQLite)
+    participant Fwd as OutboxForwarder
+    participant Hub as Server: EventsHub
+    participant DB as Server: SQLite
 
-**חסרונות / גבולות אחריות:** מצריך ניהול חיבור stateful. האחריות על *guaranteed delivery* היא של ה-Agent (outbox), לא של ה-Hub - ה-Hub רק מאשר קבלה (ack) אחרי ששמר ל-DB.
+    Src->>Agent: POST /ingest/{sourceId} + X-Api-Key
+    Agent->>Agent: אימות API Key
+    Agent->>Outbox: כתיבה (OutboxId חדש)
+    Agent-->>Src: 202 Accepted (מיידי)
 
-**חלופה שנשקלה ונדחתה:** קריאות REST רגילות (`HttpClient.PostAsync`) מה-Agent לשרת, עם retry (למשל דרך Polly). פשוטה יותר ו-stateless, אך חד-כיוונית וכל אירוע = round-trip HTTP נפרד - overhead גבוה יותר לעומת חיבור פתוח, ופחות "בזמן אמת".
+    loop כל 2 שניות
+        Fwd->>Outbox: שליפת ממתינים
+        Fwd->>Hub: ReportEvent(message) [SignalR, X-Agent-Key]
+        Hub->>DB: INSERT FieldEvent (אם OutboxId חדש)
+        Hub-->>Fwd: EventAckResponse{Success, ServerEventId}
+        Fwd->>Outbox: מחיקת השורה (רק אחרי ack)
+        Hub->>Hub: NotifyDispatchersNewEventAsync -> ClientsHub
+    end
+```
 
-### אימות מקורות (Agent)
+הנקודה הקריטית: ה-**ack למקור החיצוני קורה לפני** שהאירוע הגיע לשרת (מחזיר 202 מיד אחרי כתיבה
+ל-outbox המקומי). זה מה שמאפשר למקור לקבל תגובה מהירה גם כששרת המרכזי איטי/לא זמין, ואת האמינות
+מבטיח ה-outbox, לא הקישור החי.
 
-כל מקור רשום ב-config (`src/FieldEvents.Agent/appsettings.json`, מקטע `Sources`) עם `Id` + `ApiKey`. `SourceRegistry.Validate(sourceId, apiKey)` בודק את הכותרת `X-Api-Key` מול הרשימה לפני שהאירוע נכנס ל-outbox. מקור לא מאומת מקבל `401`.
+### מנגנון התקשורת עם השרת ומדוע
 
-### מה קורה כשהשרת המרכזי לא זמין
+`OutboxForwarder` (`BackgroundService`) מחזיק `HubConnection` (SignalR client) עם
+`WithAutomaticReconnect()` מול `EventsHub`, וקורא ל-method `ReportEvent` על כל אירוע.
 
-זו הסיבה המרכזית לקיומו של ה-**outbox מקומי** (`OutboxStore`, טבלת SQLite נפרדת בתוך ה-Agent, `agent-outbox.db`):
+**נבחר SignalR ולא REST רגיל** כי: (א) החיבור נשאר פתוח - אין overhead של handshake לכל הודעה,
+מתאים ל"הודעות קצרות בזמן אמת"; (ב) דו-כיווני מטבעו - פתח לעתיד שבו השרת "יכול לדבר בחזרה" ל-Agent
+(למשל: הוראת ניתוק, בקשת סטטוס); (ג) `WithAutomaticReconnect` נותן resilience "בחינם".
+המחיר: ניהול חיבור stateful, ותלות בזמינות ה-Hub (מטופל ב-outbox, לא ב-SignalR עצמו).
 
-1. כל אירוע שמתקבל מ-`/ingest` נכתב קודם ל-outbox, ורק אז ה-endpoint מחזיר תשובה למקור (202 Accepted) - המקור מקבל אישור מהיר גם אם השרת המרכזי כרגע לא זמין.
-2. `OutboxForwarder` מנסה לשלוח כל שורה בתור, ומוחק אותה מה-outbox **רק** אחרי ack מהשרת.
-3. אם החיבור נופל - `WithAutomaticReconnect()` מנסה מחדש עם backoff; אם הניסיונות האוטומטיים נגמרים, הלולאה הראשית של ה-`BackgroundService` ממשיכה לנסות `StartAsync` כל 2 שניות ללא הגבלת זמן.
-4. מכיוון שה-outbox נשמר על דיסק (לא רק בזיכרון), גם אם ה-Agent עצמו קורס/מופעל מחדש באמצע ההפסקה - האירועים שלא אושרו עדיין קיימים ונשלחים כשהחיבור חוזר.
-5. `OutboxId` (GUID שנוצר ב-Agent) הוא מפתח אידמפוטנטיות: אם ה-Agent שולח שוב אירוע שכבר נשלח בעבר (למשל כי הוא לא ראה את ה-ack), `EventsHub.ReportEvent` מזהה את הכפילות ומחזיר את אותו `ServerEventId` בלי ליצור רשומה כפולה.
+**שתי חלופות שנשקלו ונדחו** למימוש ה-Agent עצמו (לא רק לפרוטוקול):
+
+1. **Azure Functions / serverless** - נדחה כי פונקציות קצרות-חיים לא מתאימות לחיבור SignalR
+   מתמשך או ל-state מקומי (outbox) ששורד בין קריאות.
+2. **Windows Service קלאסי** (`System.ServiceProcess`) - נדחה כי Worker Service המודרני
+   (Generic Host) נותן את אותה יכולת פריסה, עם DI/Config/Logging מובנים וקוד ניתן לתחזוקה יותר.
+
+**הבחירה הסופית:** .NET Worker Service (`Microsoft.NET.Sdk.Web`, Generic Host), משלב
+`BackgroundService` (ה-forwarder) עם Minimal API מוטמע (ה-ingest endpoint) באותו תהליך.
 
 ### הוספת מקור חדש
 
-הוספת מקור = שורה חדשה במקטע `Sources` ב-config (`Id` + `ApiKey`) - אין צורך בשינוי קוד, כל עוד המקור שולח JSON בפורמט האחיד (`IncomingEventRequest`). מקור עם פורמט payload שונה לחלוטין ידרוש שכבת מיפוי קטנה (adapter) לפני קריאה ל-`OutboxStore.EnqueueAsync` - אבל צנרת ה-outbox/forwarding/retry נשארת זהה.
+שורה נוספת במקטע `Sources` ב-`appsettings.json` (מזהה + מפתח API) - ללא שינוי קוד, כל עוד המקור
+שולח JSON בפורמט האחיד. מקור עם מבנה נתונים שונה ידרוש שכבת מיפוי קטנה לפני הכנסה ל-outbox; שאר
+הצנרת (retry, אימות, forwarding) נשארת זהה.
 
-## 2. השרת המרכזי (Backend)
+## 4. State Machine של האירוע
 
-### State Machine
-
-`EventStateMachine` (`src/FieldEvents.Server/Domain/EventStateMachine.cs`) הוא class סטטי, ללא תלויות, עם מפת מעברים חוקיים מפורשת:
-
+```mermaid
+stateDiagram-v2
+    [*] --> New
+    New --> Assigned
+    New --> Cancelled
+    Assigned --> InProgress
+    Assigned --> Cancelled
+    InProgress --> Assigned: העברה בין טכנאים
+    InProgress --> Completed
+    InProgress --> Cancelled
+    Completed --> [*]
+    Cancelled --> [*]
 ```
-New        -> Assigned, Cancelled
-Assigned   -> InProgress, Cancelled
-InProgress -> Assigned (העברה בין טכנאים), Completed, Cancelled
-Completed  -> (מצב סופי)
-Cancelled  -> (מצב סופי)
+
+המעברים מוגדרים במפורש כמפה (`EventStateMachine.AllowedTransitions`) - כל מעבר שלא רשום שם נדחה
+עם `InvalidEventTransitionException`. שינוי סטטוס אפשרי **רק** דרך `FieldEvent.TransitionTo(...)`
+(ה-setter של `Status` הוא `private`), וכל מעבר נרשם ב-`EventStatusHistory` (מצב קודם, מצב חדש, מי
+ביצע, מתי) - זו ההיסטוריה שמוצגת ב-UI. מכוסה ב-20 unit tests (`tests/FieldEvents.Server.Tests`):
+כל מעבר חוקי, כל מעבר לא חוקי, ושרשור מעברים מלא.
+
+## 5. מודל נתונים (ERD)
+
+```mermaid
+erDiagram
+    FieldEvent ||--o{ EventStatusHistory : "היסטוריית סטטוסים"
+    FieldEvent ||--o{ EventComment : "הערות טכנאי"
+    User ||--o{ EventComment : "כותב"
+    User ||--o{ PushSubscription : "מנוי Push (stub)"
+
+    FieldEvent {
+        int Id PK
+        string Title
+        string Description
+        string Location
+        string Source
+        int Priority
+        int Status
+        int AssignedTechnicianId FK
+        guid OutboxId UK "אידמפוטנטיות מה-Agent"
+        string ExternalRef
+        datetimeoffset CreatedAtUtc
+    }
+    EventStatusHistory {
+        int Id PK
+        int FieldEventId FK
+        int FromStatus
+        int ToStatus
+        int ChangedByUserId FK
+        datetimeoffset ChangedAtUtc
+    }
+    User {
+        int Id PK
+        string UserName UK
+        string PasswordHash
+        string PasswordSalt
+        int Role "Dispatcher/Technician"
+    }
+    EventComment {
+        int Id PK
+        int FieldEventId FK
+        int UserId FK
+        string Text
+        datetimeoffset CreatedAtUtc
+    }
+    PushSubscription {
+        int Id PK
+        int UserId FK
+        string Endpoint
+        string P256dh
+        string Auth
+    }
 ```
 
-`FieldEvent.TransitionTo(...)` הוא הדרך **היחידה** לשנות סטטוס (ה-setter של `Status` הוא `private`) - כל שינוי עובר דרך המפה, ומוסיף רשומת `EventStatusHistory` (סטטוס קודם, סטטוס חדש, מי ביצע, מתי). מעבר לא חוקי זורק `InvalidEventTransitionException`. מכוסה במלואו ב-`tests/FieldEvents.Server.Tests` (20 בדיקות: כל מעבר חוקי, כל מעבר לא חוקי, ושרשור מעברים).
+`FieldEvent.OutboxId` הוא Unique Index - זה מה שמונע יצירת אירוע כפול אם ה-Agent שולח שוב אירוע
+שכבר עובד בעבר (ack שאבד). `PushSubscription` קיימת כסכימה מוכנה למימוש Web Push עתידי (ראו §7).
 
-### הרשאות
+## 6. מנגנון אבטחה ואימות
 
-JWT עם claim מסוג `role` (`Dispatcher`/`Technician`), נאכף אך ורק בצד השרת עם `[Authorize(Roles = ...)]` על ה-Controllers (למשל `GET /api/events` מוגבל ל-Dispatcher, `GET /api/events/mine` ל-Technician) - לעולם לא באמון על ה-UI. נבדק ידנית: טכנאי שמנסה לגשת ל-endpoint של סדרן מקבל `403`.
-
-### Real-time לקוחות - שני מסלולים
-
-**משתמש מחובר:** `ClientsHub` (SignalR). `ConnectionManager` בזיכרון עוקב אחרי אילו משתמשים מחוברים כרגע (`OnConnectedAsync`/`OnDisconnectedAsync`), ומוסיף כל חיבור לקבוצות לפי role (`Dispatchers`/`Technicians`) ולקבוצה אישית (`user-{id}`). זה מה ש"מלמד את השרת" באיזה מצב המשתמש נמצא.
-
-**משתמש מנותק:** תוכנן כ-Web Push (VAPID) + Service Worker בצד הלקוח, אך **לא מומש בפועל** - זהו stub מכוון (`IPushNotificationChannel` / `WebPushNotificationChannel`), עם תיעוד מלא של מה חסר בקובץ עצמו. טבלת `PushSubscription` קיימת ב-DB לצורך זה.
-
-`NotificationService` הוא המקום שבו קורה ה"מעבר בין שני המצבים": `NotifyTechnicianAsync` בודק ב-`ConnectionManager.IsOnline(userId)` - אם המשתמש מחובר שולח ב-SignalR, אחרת קורא ל-`IPushNotificationChannel` (stub). ה-Flow הנדרש (התראת סדרן על אירוע חדש) עובר תמיד דרך `ClientsHub` ל-group `Dispatchers`, ולכן ממומש E2E באופן מלא.
-
-### אבטחה
-
-- **משתמשי קצה:** JWT Bearer (נבחר על פני Cookie/Session בגלל SPA + SignalR; הטוקן מועבר גם כ-query string ב-handshake של SignalR - תבנית סטנדרטית כי דפדפנים לא יכולים להוסיף headers מותאמים אישית ל-WebSocket handshake).
-- **Agent -> Server:** scheme נפרד (`AgentApiKeyAuthenticationHandler`) - מפתח קבוע ב-config, שונה לחלוטין ממנגנון ה-JWT של משתמשי הקצה, כדי להפריד בבירור בין "משתמש אנושי מחובר" ל"שירות פנימי מהימן".
-- **הצפנה:** HTTPS/WSS בכל הערוצים (Kestrel + HTTPS redirection; בפיתוח מקומי - `dotnet dev-certs https --trust`).
-
-## 3. Skeleton מכוון (לא ממומש E2E)
-
-לפי דרישות הפרויקט, רק Flow אחד צריך מימוש E2E מלא. הדברים הבאים קיימים ברמת מבנה/interface אך אינם ממומשים במלואם:
-
-- **Web Push אמיתי** (`WebPushNotificationChannel`) - רק לוג "היה נשלח push".
-- **Technician UI מחובר ל-SignalR בזמן אמת** - כרגע קורא REST בלבד (`GET /api/events/mine`); הקריאה לצד-שרת (`NotifyTechnicianAsync`) כבר קיימת ועובדת, רק אין מאזין בצד ה-Angular עבור טכנאי.
-- הקצאה/העברה/הערות (`EventsController`) **כן** ממומשות בפועל (לא stub) כי הן זולות לממש ברגע שיש State Machine ו-`INotificationService`, אבל אינן חלק מה-Flow הנדרש ולא קיבלו את אותה רמת בדיקות.
-
-## סיכום Trade-offs מרכזיים
-
-| החלטה | המחיר ששילמנו | מה קיבלנו בתמורה |
+| ערוץ | מנגנון | נימוק |
 |---|---|---|
-| SignalR ולא REST פשוט בין Agent ל-Server | מורכבות ניהול חיבור stateful | Real-time אמיתי, ערוץ דו-כיווני עתידי |
-| SQLite ולא SQL Server | פחות מתאים לעומס/concurrency גבוה | אפס התקנה, "clone and run" מיידי - מתאים לנפח הנתונים הקטן שתואר בדרישות |
-| Outbox מקומי ב-Agent (SQLite נפרד) | טבלה/קוד נוסף לתחזק | אירוע לעולם לא הולך לאיבוד, גם בקריסת Agent |
-| Web Push כ-stub בלבד | המסלול "משתמש מנותק" לא עובד בפועל | התמקדות מלאה באיכות ה-Flow הנדרש, בהתאם לדרישות הפרויקט |
+| משתמש קצה → Server (REST + `ClientsHub`) | JWT Bearer; ב-SignalR מועבר כ-query string (`access_token`) כי דפדפן לא יכול לשלוח header מותאם ב-WebSocket handshake | מתאים ל-SPA stateless; claim `role` (`Dispatcher`/`Technician`) נאכף **רק בצד השרת** עם `[Authorize(Roles=...)]` - לא באמון על ה-UI |
+| Agent → Server (`EventsHub`) | Scheme נפרד: `AgentApiKeyAuthenticationHandler`, מפתח קבוע בכותרת `X-Agent-Key` | מבדיל בבירור בין "שירות פנימי מהימן" לבין משתמש אנושי - אינו יכול "להתחזות" למשתמש ולהפך |
+| מקור חיצוני → Agent | `X-Api-Key` per-source מול `SourceRegistry` | כל מקור מזוהה ומבוקר בנפרד; מפתח שנפגם ניתן לביטול נקודתי |
+| כל הערוצים | HTTPS/WSS | Kestrel + HTTPS redirection; בפיתוח - `dotnet dev-certs https --trust` |
+
+אומת ידנית: בקשה עם JWT של טכנאי ל-endpoint שמוגבל לסדרנים (`GET /api/events`) מחזירה `403`;
+בקשה ללא טוקן מחזירה `401`.
+
+## 7. התנהגות המערכת כשרכיב לא זמין
+
+| תרחיש | מה קורה |
+|---|---|
+| **השרת המרכזי נופל** | ה-Agent ממשיך לקבל אירועים חדשים (`202 Accepted`) ולכתוב אותם ל-**outbox מקומי** (SQLite נפרד, `agent-outbox.db`). `WithAutomaticReconnect()` מנסה reconnect עם backoff; כשהוא מתייאש, הלולאה הראשית ב-`OutboxForwarder` ממשיכה לנסות `StartAsync` כל 2 שניות ללא הגבלת זמן. עם חזרת השרת - כל האירועים הממתינים נשלחים אוטומטית, ללא התערבות ידנית. **מאומת בפועל** (ראו README): אירוע שנשלח בזמן שהשרת היה למטה הופיע ב-DB תוך שניות מרגע ההפעלה מחדש. |
+| **ה-Agent עצמו קורס/מופעל מחדש** | האירועים שעדיין לא קיבלו ack נשארים ב-outbox על הדיסק (לא בזיכרון) - עם עלייה מחדש, `OutboxForwarder` ממשיך לרוקן אותם. שום אירוע לא הולך לאיבוד גם אם הקריסה קרתה רגע לפני השליחה. |
+| **אירוע נשלח פעמיים** (Agent שלח מחדש כי לא ראה ack) | `OutboxId` הוא מפתח אידמפוטנטיות ייחודי ב-DB - `EventsHub.ReportEvent` מזהה כפילות ומחזיר את אותו `ServerEventId` בלי רשומה נוספת. |
+| **משתמש קצה מנותק (דפדפן סגור)** | מתוכנן כ-Web Push, כרגע stub מתועד (`WebPushNotificationChannel`) - ראו §8. הודעה ל"מחובר" מגיעה תמיד; ל"מנותק" רק תירשם בלוג כרגע. |
+| **חיבור SignalR של דפדפן נופל** (`ClientsHub`) | `ConnectionManager` מסיר את החיבור ב-`OnDisconnectedAsync`; הלקוח (Angular, `withAutomaticReconnect`) מנסה reconnect בעצמו. |
+
+## 8. Trade-offs ובחירות טכנולוגיות מרכזיות
+
+| החלטה | המחיר ששולם | מה התקבל בתמורה |
+|---|---|---|
+| SignalR (לא REST פשוט) בין Agent ל-Server | ניהול חיבור stateful, מורכבות רבה יותר מ-`HttpClient` + Polly | Real-time אמיתי, ערוץ דו-כיווני לעתיד, reconnect מובנה |
+| SQLite (לא SQL Server) ל-DB של השרת | פחות מתאים לעומס/concurrency גבוה בסביבת production | "clone and run" מיידי בלי התקנה - מתאים לנפח הנתונים הקטן שתואר בדרישות |
+| Outbox מקומי נפרד (SQLite) בתוך ה-Agent | טבלה/קוד נוספים לתחזק, שני מסדי נתונים בפרויקט | אירוע לעולם לא הולך לאיבוד - לא בנפילת שרת, לא בקריסת Agent |
+| Web Push כ-stub מתועד ולא מומש | המסלול "משתמש מנותק" לא עובד בפועל כרגע | מיקוד מלא באיכות ה-Flow הנדרש (E2E), בהתאם לדרישות הפרויקט ("אין חובה לממש את כלל מנגנוני ההתראות") |
+| JWT Bearer (לא Cookie/Session) | ניהול ידני של expiry/refresh (לא ממומש refresh token בשלב זה) | Stateless, מתאים טבעי ל-SPA + SignalR, אין תלות ב-server-side session store |
+| State Machine כ-class סטטי ללא DI | פחות "אניברסלי" מבחינת testability עם mocking frameworks | פשוט ככל האפשר לבדוק (pure functions), בלתי אפשרי לעקוף בטעות כי `FieldEvent.Status` הוא `private set` |
