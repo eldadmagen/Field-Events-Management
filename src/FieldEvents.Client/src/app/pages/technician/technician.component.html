@@ -1,0 +1,32 @@
+<header>
+  <h1>My events</h1>
+  <div class="header-right">
+    <span>{{ auth.userName() }}</span>
+    <button (click)="logout()">Log out</button>
+  </div>
+</header>
+
+<table>
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Priority</th>
+      <th>Status</th>
+      <th>Created</th>
+    </tr>
+  </thead>
+  <tbody>
+    @for (evt of events(); track evt.id) {
+      <tr>
+        <td>{{ evt.title }}</td>
+        <td>{{ EventPriority[evt.priority] }}</td>
+        <td>{{ EventStatus[evt.status] }}</td>
+        <td>{{ evt.createdAtUtc | date: 'short' }}</td>
+      </tr>
+    } @empty {
+      <tr>
+        <td colspan="4">No events assigned to you yet.</td>
+      </tr>
+    }
+  </tbody>
+</table>

@@ -1,0 +1,6 @@
+@FieldEvents.Server_HostAddress = http://localhost:5064
+
+GET {{FieldEvents.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

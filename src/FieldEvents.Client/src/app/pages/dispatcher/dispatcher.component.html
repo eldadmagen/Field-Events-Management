@@ -1,0 +1,43 @@
+<header>
+  <h1>Dispatcher dashboard</h1>
+  <div class="header-right">
+    <span class="status" [class.online]="signalr.connectionState() === 'Connected'">
+      {{ signalr.connectionState() }}
+    </span>
+    <span>{{ auth.userName() }}</span>
+    <button (click)="logout()">Log out</button>
+  </div>
+</header>
+
+<p class="hint">
+  New events reported by external sources through the Agent appear here in real time, no refresh needed.
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Source</th>
+      <th>Priority</th>
+      <th>Status</th>
+      <th>Assigned Technician</th>
+      <th>Created</th>
+    </tr>
+  </thead>
+  <tbody>
+    @for (evt of signalr.events(); track evt.id) {
+      <tr>
+        <td>{{ evt.title }}</td>
+        <td>{{ evt.source }}</td>
+        <td>{{ EventPriority[evt.priority] }}</td>
+        <td>{{ EventStatus[evt.status] }}</td>
+        <td>{{ evt.assignedTechnicianId ?? '-' }}</td>
+        <td>{{ evt.createdAtUtc | date: 'short' }}</td>
+      </tr>
+    } @empty {
+      <tr>
+        <td colspan="6">No events yet.</td>
+      </tr>
+    }
+  </tbody>
+</table>

@@ -1,0 +1,23 @@
+# .NET
+bin/
+obj/
+*.user
+*.db
+*.db-shm
+*.db-wal
+
+# Visual Studio
+.vs/
+
+# Angular / Node
+node_modules/
+dist/
+.angular/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pre-existing unrelated content in this directory - not part of this project
+/targil/
+/server/
