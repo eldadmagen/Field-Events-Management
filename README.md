@@ -83,6 +83,22 @@ curl -X POST http://localhost:5080/ingest/sensor-1 \
 The event appears in the Dispatcher dashboard immediately, with no page refresh - that's the whole
 flow: external source -> Agent (outbox) -> SignalR -> Server -> SQLite -> SignalR -> Dispatcher UI.
 
+### Verified manually (not just designed on paper)
+
+Both of these were actually run against this codebase, not just reasoned about:
+
+- **Happy path**: `curl` to the Agent -> event visible via `GET /api/events` with a dispatcher JWT,
+  Agent log shows `Forwarded event ... -> server event N`.
+- **Server-outage resilience**: started the Agent with the Server stopped, POSTed an event (still got
+  `202 Accepted` immediately), confirmed the Agent kept retrying the connection in the background,
+  then started the Server - the queued event was forwarded and persisted automatically within
+  seconds, with no manual replay. This is the "outbox" design from `docs/ARCHITECTURE.md` working
+  as intended, not just described.
+- **Authorization**: a technician JWT against the dispatcher-only `GET /api/events` returns `403`;
+  no token returns `401`.
+- Also caught and fixed a real bug this way: EF Core + SQLite cannot `ORDER BY` a `DateTimeOffset`
+  column directly - event listing now orders by `Id` instead.
+
 ## Running tests
 
 ```
