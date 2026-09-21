@@ -124,3 +124,6 @@ dotnet test tests/FieldEvents.Server.Tests
 `appsettings.Development.json` in the Server, and `appsettings.json` in the Agent, contain a fixed
 demo JWT signing key and Agent API key **for local development only**. In any real deployment these
 would come from environment variables / a secret store, not source control.
+
+## help
+- AI like clode and gemini
