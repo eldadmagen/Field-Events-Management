@@ -3,10 +3,10 @@
 Real-time field-event coordination system: external sources report events through an Agent, which
 forwards them to a central Server that dispatchers and technicians interact with in real time.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the architectural decisions and trade-offs
+See [`docs/Field_Events_Architecture.docx`](docs/Field_Events_Architecture.docx)  for the architectural decisions and trade-offs
 (Markdown, with Mermaid diagrams - renders natively on GitHub/GitLab/VS Code). A Word version with
-the same content and rendered diagram images is also available at
-[`docs/Field_Events_Architecture.docx`](docs/Field_Events_Architecture.docx).
+the same content and rendered diagram images 
+
 
 ## Solution layout
 
