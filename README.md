@@ -46,6 +46,7 @@ three demo users (username / password, all `Passw0rd!`):
 | tech1        | Technician |
 | tech2        | Technician |
 
+
 Swagger UI: `https://localhost:7180/swagger`.
 
 ### 2. Agent
@@ -72,7 +73,8 @@ npm start
 ```
 
 Open `http://localhost:4200`, log in as `dispatcher1` / `Passw0rd!`.
-
+or `tech1`/ `Passw0rd!`.
+or `tech2`/ `Passw0rd!`
 ### 4. Trigger the flow
 
 With Server + Agent + Client all running, simulate an external source reporting an event:

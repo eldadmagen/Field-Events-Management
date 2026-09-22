@@ -11,8 +11,8 @@ import { AuthService } from '../../core/auth.service';
   styleUrl: './login.component.css'
 })
 export class LoginComponent {
-  userName = 'dispatcher1';
-  password = 'Passw0rd!';
+  userName = '';
+  password = '';
   readonly error = signal<string | null>(null);
 
   constructor(private readonly auth: AuthService, private readonly router: Router) {}
