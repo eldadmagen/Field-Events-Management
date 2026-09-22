@@ -1,5 +1,4 @@
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
@@ -26,7 +25,7 @@ interface TechnicianRow extends TechnicianSummary {
 @Component({
   selector: 'app-dispatcher',
   standalone: true,
-  imports: [DatePipe, FormsModule],
+  imports: [FormsModule],
   templateUrl: './dispatcher.component.html',
   styleUrl: './dispatcher.component.css'
 })

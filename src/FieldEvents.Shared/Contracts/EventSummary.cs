@@ -12,4 +12,5 @@ public sealed class EventSummary
     public EventStatus Status { get; set; }
     public int? AssignedTechnicianId { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
+    public string? LatestComment { get; set; }
 }

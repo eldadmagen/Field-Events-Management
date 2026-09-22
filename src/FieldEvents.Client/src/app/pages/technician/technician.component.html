@@ -9,15 +9,23 @@
 <section>
   <h2>My events</h2>
   <div class="panel">
-    <table>
+    <table class="events-table">
+      <colgroup>
+        <col style="width: auto;">
+        <col style="width: 7rem;">
+        <col style="width: 7rem;">
+        <col style="width: 9rem;">
+        <col style="width: 22rem;">
+        <col style="width: 9rem;">
+      </colgroup>
       <thead>
         <tr>
           <th>Title</th>
           <th>Priority</th>
           <th>Status</th>
           <th>Created</th>
-          <th>Update status</th>
           <th>Comment to dispatcher</th>
+          <th>Update status</th>
         </tr>
       </thead>
       <tbody>
@@ -27,6 +35,15 @@
             <td><span [class]="'badge priority-' + evt.priority">{{ EventPriority[evt.priority] }}</span></td>
             <td><span [class]="'badge status-' + evt.status">{{ EventStatus[evt.status] }}</span></td>
             <td>{{ evt.createdAtUtc | date: 'short' }}</td>
+            <td class="comment-cell">
+              <input
+                type="text"
+                placeholder="Update for dispatcher..."
+                [ngModel]="commentDraft(evt.id)"
+                (ngModelChange)="updateCommentDraft(evt.id, $event)"
+              />
+              <button (click)="sendComment(evt.id)">Send</button>
+            </td>
             <td class="status-cell">
               @for (next of nextStatuses(evt.status); track next) {
                 <button
@@ -36,15 +53,6 @@
                   {{ EventStatus[next] }}
                 </button>
               }
-            </td>
-            <td class="comment-cell">
-              <input
-                type="text"
-                placeholder="Update for dispatcher..."
-                [ngModel]="commentDraft(evt.id)"
-                (ngModelChange)="updateCommentDraft(evt.id, $event)"
-              />
-              <button (click)="sendComment(evt.id)">Send</button>
             </td>
           </tr>
         } @empty {

@@ -54,8 +54,8 @@ public class EventsController(AppDbContext db, INotificationService notification
     [HttpGet("{id:int}")]
     public async Task<ActionResult<EventSummary>> GetById(int id)
     {
-        var evt = await db.Events.FindAsync(id);
-        return evt is null ? NotFound() : ToSummaryValue(evt);
+        var summary = await db.Events.Where(e => e.Id == id).Select(ToSummary).FirstOrDefaultAsync();
+        return summary is null ? NotFound() : summary;
     }
 
     [HttpGet("{id:int}/history")]
@@ -76,7 +76,7 @@ public class EventsController(AppDbContext db, INotificationService notification
         evt.AssignedTechnicianId = request.TechnicianId;
         await db.SaveChangesAsync();
 
-        var summary = ToSummaryValue(evt).Value!;
+        var summary = await BuildSummaryAsync(evt);
         await notifications.NotifyTechnicianAsync(request.TechnicianId, summary);
         await notifications.NotifyDispatchersNewEventAsync(summary);
         return NoContent();
@@ -93,7 +93,7 @@ public class EventsController(AppDbContext db, INotificationService notification
         evt.AssignedTechnicianId = request.TechnicianId;
         await db.SaveChangesAsync();
 
-        var summary = ToSummaryValue(evt).Value!;
+        var summary = await BuildSummaryAsync(evt);
         if (previousTechnicianId is not null)
         {
             await notifications.NotifyTechnicianAsync(previousTechnicianId.Value, summary);
@@ -113,7 +113,7 @@ public class EventsController(AppDbContext db, INotificationService notification
         evt.Priority = request.NewPriority;
         await db.SaveChangesAsync();
 
-        var summary = ToSummaryValue(evt).Value!;
+        var summary = await BuildSummaryAsync(evt);
         await notifications.NotifyDispatchersNewEventAsync(summary);
         if (evt.AssignedTechnicianId is not null)
         {
@@ -134,7 +134,7 @@ public class EventsController(AppDbContext db, INotificationService notification
         evt.AssignedTechnicianId = CurrentUserId;
         await db.SaveChangesAsync();
 
-        await notifications.NotifyDispatchersNewEventAsync(ToSummaryValue(evt).Value!);
+        await notifications.NotifyDispatchersNewEventAsync(await BuildSummaryAsync(evt));
         return NoContent();
     }
 
@@ -148,7 +148,7 @@ public class EventsController(AppDbContext db, INotificationService notification
         evt.TransitionTo(request.NewStatus, CurrentUserId);
         await db.SaveChangesAsync();
 
-        var summary = ToSummaryValue(evt).Value!;
+        var summary = await BuildSummaryAsync(evt);
         await notifications.NotifyDispatchersNewEventAsync(summary);
         if (evt.AssignedTechnicianId is not null)
         {
@@ -167,7 +167,7 @@ public class EventsController(AppDbContext db, INotificationService notification
         db.EventComments.Add(new EventComment { FieldEventId = id, UserId = CurrentUserId, Text = request.Text });
         await db.SaveChangesAsync();
 
-        await notifications.NotifyDispatchersNewEventAsync(ToSummaryValue(evt).Value!);
+        await notifications.NotifyDispatchersNewEventAsync(await BuildSummaryAsync(evt));
         return NoContent();
     }
 
@@ -181,19 +181,34 @@ public class EventsController(AppDbContext db, INotificationService notification
         Priority = e.Priority,
         Status = e.Status,
         AssignedTechnicianId = e.AssignedTechnicianId,
-        CreatedAtUtc = e.CreatedAtUtc
+        CreatedAtUtc = e.CreatedAtUtc,
+        LatestComment = e.Comments.OrderByDescending(c => c.Id).Select(c => c.Text).FirstOrDefault()
     };
 
-    private static ActionResult<EventSummary> ToSummaryValue(FieldEvent e) => new EventSummary
+    /// <summary>
+    /// Builds a summary for a just-mutated entity, including its latest comment - queried fresh
+    /// since e.Comments isn't loaded on an entity fetched via FindAsync.
+    /// </summary>
+    private async Task<EventSummary> BuildSummaryAsync(FieldEvent e)
     {
-        Id = e.Id,
-        Title = e.Title,
-        Description = e.Description,
-        Location = e.Location,
-        Source = e.Source,
-        Priority = e.Priority,
-        Status = e.Status,
-        AssignedTechnicianId = e.AssignedTechnicianId,
-        CreatedAtUtc = e.CreatedAtUtc
-    };
+        var latestComment = await db.EventComments
+            .Where(c => c.FieldEventId == e.Id)
+            .OrderByDescending(c => c.Id)
+            .Select(c => c.Text)
+            .FirstOrDefaultAsync();
+
+        return new EventSummary
+        {
+            Id = e.Id,
+            Title = e.Title,
+            Description = e.Description,
+            Location = e.Location,
+            Source = e.Source,
+            Priority = e.Priority,
+            Status = e.Status,
+            AssignedTechnicianId = e.AssignedTechnicianId,
+            CreatedAtUtc = e.CreatedAtUtc,
+            LatestComment = latestComment
+        };
+    }
 }

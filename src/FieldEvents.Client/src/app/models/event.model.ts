@@ -23,6 +23,7 @@ export interface EventSummary {
   status: EventStatus;
   assignedTechnicianId?: number;
   createdAtUtc: string;
+  latestComment?: string;
 }
 
 export interface TechnicianSummary {

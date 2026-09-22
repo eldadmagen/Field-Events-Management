@@ -18,20 +18,18 @@
     <thead>
       <tr>
         <th>Title</th>
-        <th>Source</th>
         <th>Priority</th>
         <th>Status</th>
         <th>Assigned Technician</th>
         <th>Assign / Transfer</th>
         <th>Close</th>
-        <th>Created</th>
+        <th>Comments</th>
       </tr>
     </thead>
     <tbody>
       @for (evt of signalr.events(); track evt.id) {
         <tr>
           <td>{{ evt.title }}</td>
-          <td>{{ evt.source }}</td>
           <td>
             <select
               [class]="'priority-select priority-' + evt.priority"
@@ -69,11 +67,11 @@
               </button>
             }
           </td>
-          <td>{{ evt.createdAtUtc | date: 'short' }}</td>
+          <td class="comments-cell">{{ evt.latestComment || '-' }}</td>
         </tr>
       } @empty {
         <tr>
-          <td colspan="8">No events yet.</td>
+          <td colspan="7">No events yet.</td>
         </tr>
       }
     </tbody>
