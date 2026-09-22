@@ -8,4 +8,5 @@ public static class HubRoutes
 
     public const string ReportEventMethod = "ReportEvent";       // Agent calls this on EventsHub
     public const string NewEventReceivedMethod = "NewEventReceived"; // Server pushes this on ClientsHub
+    public const string TechnicianPresenceChangedMethod = "TechnicianPresenceChanged"; // Server pushes this on ClientsHub
 }

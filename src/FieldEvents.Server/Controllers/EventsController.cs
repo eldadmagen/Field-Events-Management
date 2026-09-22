@@ -13,6 +13,7 @@ namespace FieldEvents.Server.Controllers;
 public record AssignRequest(int TechnicianId);
 public record StatusChangeRequest(EventStatus NewStatus);
 public record CommentRequest(string Text);
+public record PriorityChangeRequest(EventPriority NewPriority);
 
 /// <summary>
 /// REST surface for everything the required E2E flow doesn't need over SignalR (reads, and the
@@ -37,6 +38,15 @@ public class EventsController(AppDbContext db, INotificationService notification
     public async Task<ActionResult<List<EventSummary>>> GetMine() =>
         await db.Events
             .Where(e => e.AssignedTechnicianId == CurrentUserId)
+            .OrderByDescending(e => e.Id)
+            .Select(ToSummary)
+            .ToListAsync();
+
+    [HttpGet("available")]
+    [Authorize(Roles = nameof(UserRole.Technician))]
+    public async Task<ActionResult<List<EventSummary>>> GetAvailable() =>
+        await db.Events
+            .Where(e => e.AssignedTechnicianId == null && e.Status == EventStatus.New)
             .OrderByDescending(e => e.Id)
             .Select(ToSummary)
             .ToListAsync();
@@ -66,7 +76,9 @@ public class EventsController(AppDbContext db, INotificationService notification
         evt.AssignedTechnicianId = request.TechnicianId;
         await db.SaveChangesAsync();
 
-        await notifications.NotifyTechnicianAsync(request.TechnicianId, ToSummaryValue(evt).Value!);
+        var summary = ToSummaryValue(evt).Value!;
+        await notifications.NotifyTechnicianAsync(request.TechnicianId, summary);
+        await notifications.NotifyDispatchersNewEventAsync(summary);
         return NoContent();
     }
 
@@ -87,6 +99,42 @@ public class EventsController(AppDbContext db, INotificationService notification
             await notifications.NotifyTechnicianAsync(previousTechnicianId.Value, summary);
         }
         await notifications.NotifyTechnicianAsync(request.TechnicianId, summary);
+        await notifications.NotifyDispatchersNewEventAsync(summary);
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/priority")]
+    [Authorize(Roles = nameof(UserRole.Dispatcher))]
+    public async Task<IActionResult> ChangePriority(int id, PriorityChangeRequest request)
+    {
+        var evt = await db.Events.FindAsync(id);
+        if (evt is null) return NotFound();
+
+        evt.Priority = request.NewPriority;
+        await db.SaveChangesAsync();
+
+        var summary = ToSummaryValue(evt).Value!;
+        await notifications.NotifyDispatchersNewEventAsync(summary);
+        if (evt.AssignedTechnicianId is not null)
+        {
+            await notifications.NotifyTechnicianAsync(evt.AssignedTechnicianId.Value, summary);
+        }
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/claim")]
+    [Authorize(Roles = nameof(UserRole.Technician))]
+    public async Task<IActionResult> Claim(int id)
+    {
+        var evt = await db.Events.FindAsync(id);
+        if (evt is null) return NotFound();
+        if (evt.AssignedTechnicianId is not null) return Conflict("Event is already assigned.");
+
+        evt.TransitionTo(EventStatus.Assigned, CurrentUserId);
+        evt.AssignedTechnicianId = CurrentUserId;
+        await db.SaveChangesAsync();
+
+        await notifications.NotifyDispatchersNewEventAsync(ToSummaryValue(evt).Value!);
         return NoContent();
     }
 
@@ -95,9 +143,17 @@ public class EventsController(AppDbContext db, INotificationService notification
     {
         var evt = await db.Events.FindAsync(id);
         if (evt is null) return NotFound();
+        if (User.IsInRole(nameof(UserRole.Technician)) && evt.AssignedTechnicianId != CurrentUserId) return Forbid();
 
         evt.TransitionTo(request.NewStatus, CurrentUserId);
         await db.SaveChangesAsync();
+
+        var summary = ToSummaryValue(evt).Value!;
+        await notifications.NotifyDispatchersNewEventAsync(summary);
+        if (evt.AssignedTechnicianId is not null)
+        {
+            await notifications.NotifyTechnicianAsync(evt.AssignedTechnicianId.Value, summary);
+        }
         return NoContent();
     }
 

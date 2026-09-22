@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using FieldEvents.Server.Services;
 using FieldEvents.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -14,7 +15,7 @@ public static class ClientGroups
 
 /// <summary>Real-time channel from the Server to logged-in Dispatcher/Technician browsers (the "connected" path from the architecture doc).</summary>
 [Authorize]
-public class ClientsHub(ConnectionManager connections) : Hub
+public class ClientsHub(ConnectionManager connections, INotificationService notifications) : Hub
 {
     public override async Task OnConnectedAsync()
     {
@@ -23,6 +24,7 @@ public class ClientsHub(ConnectionManager connections) : Hub
 
         if (userId is not null)
         {
+            var wasOnline = connections.IsOnline(userId);
             connections.AddConnection(userId, Context.ConnectionId);
             await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroups.ForUser(userId));
 
@@ -33,20 +35,32 @@ public class ClientsHub(ConnectionManager connections) : Hub
             else if (role == nameof(UserRole.Technician))
             {
                 await Groups.AddToGroupAsync(Context.ConnectionId, ClientGroups.Technicians);
+
+                if (!wasOnline)
+                {
+                    await notifications.NotifyTechnicianPresenceChangedAsync(int.Parse(userId), true);
+                }
             }
         }
 
         await base.OnConnectedAsync();
     }
 
-    public override Task OnDisconnectedAsync(Exception? exception)
+    public override async Task OnDisconnectedAsync(Exception? exception)
     {
         var userId = Context.UserIdentifier ?? Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
+        var role = Context.User?.FindFirstValue(ClaimTypes.Role);
+
         if (userId is not null)
         {
             connections.RemoveConnection(userId, Context.ConnectionId);
+
+            if (role == nameof(UserRole.Technician) && !connections.IsOnline(userId))
+            {
+                await notifications.NotifyTechnicianPresenceChangedAsync(int.Parse(userId), false);
+            }
         }
 
-        return base.OnDisconnectedAsync(exception);
+        await base.OnDisconnectedAsync(exception);
     }
 }

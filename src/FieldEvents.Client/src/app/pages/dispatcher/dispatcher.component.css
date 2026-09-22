@@ -45,3 +45,13 @@ td {
   padding: 0.5rem;
   border-bottom: 1px solid #eee;
 }
+
+section {
+  margin-top: 2rem;
+}
+
+.action-cell {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}

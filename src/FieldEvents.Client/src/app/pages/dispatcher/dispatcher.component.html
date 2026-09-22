@@ -21,6 +21,8 @@
       <th>Priority</th>
       <th>Status</th>
       <th>Assigned Technician</th>
+      <th>Assign / Transfer</th>
+      <th>Close</th>
       <th>Created</th>
     </tr>
   </thead>
@@ -29,15 +31,73 @@
       <tr>
         <td>{{ evt.title }}</td>
         <td>{{ evt.source }}</td>
-        <td>{{ EventPriority[evt.priority] }}</td>
+        <td>
+          <select [ngModel]="evt.priority" (ngModelChange)="setPriority(evt.id, $event)">
+            @for (p of priorities; track p) {
+              <option [value]="p">{{ EventPriority[p] }}</option>
+            }
+          </select>
+        </td>
         <td>{{ EventStatus[evt.status] }}</td>
-        <td>{{ evt.assignedTechnicianId ?? '-' }}</td>
+        <td>{{ technicianName(evt.assignedTechnicianId) }}</td>
+        <td class="action-cell">
+          <select [ngModel]="pickedTechnician(evt.id)" (ngModelChange)="pickTechnician(evt.id, $event)">
+            <option [ngValue]="null">Select technician...</option>
+            @for (t of technicians(); track t.id) {
+              <option [ngValue]="t.id">{{ t.userName }} ({{ t.isOnline ? 'online' : 'offline' }})</option>
+            }
+          </select>
+          @if (evt.assignedTechnicianId == null) {
+            <button (click)="assign(evt.id)" [disabled]="pickedTechnician(evt.id) == null">Assign</button>
+          } @else {
+            <button (click)="transfer(evt.id)" [disabled]="pickedTechnician(evt.id) == null">Transfer</button>
+          }
+        </td>
+        <td class="action-cell">
+          @for (next of closeStatuses(evt.status); track next) {
+            <button (click)="changeStatus(evt.id, next)">{{ EventStatus[next] }}</button>
+          }
+        </td>
         <td>{{ evt.createdAtUtc | date: 'short' }}</td>
       </tr>
     } @empty {
       <tr>
-        <td colspan="6">No events yet.</td>
+        <td colspan="8">No events yet.</td>
       </tr>
     }
   </tbody>
 </table>
+
+<section>
+  <h2>Technicians</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Status</th>
+        <th>Active events</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (t of technicianRows(); track t.id) {
+        <tr>
+          <td>{{ t.userName }}</td>
+          <td>
+            <span class="status" [class.online]="t.isOnline">{{ t.isOnline ? 'Online' : 'Offline' }}</span>
+          </td>
+          <td>
+            @if (t.activeEvents.length === 0) {
+              -
+            } @else {
+              {{ t.activeEvents.length }} — {{ t.activeEventTitles }}
+            }
+          </td>
+        </tr>
+      } @empty {
+        <tr>
+          <td colspan="3">No technicians registered.</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</section>

@@ -45,3 +45,17 @@ td {
   padding: 0.5rem;
   border-bottom: 1px solid #eee;
 }
+
+section {
+  margin-top: 2rem;
+}
+
+.comment-cell {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.comment-cell input {
+  flex: 1;
+}

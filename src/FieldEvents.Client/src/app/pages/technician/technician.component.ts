@@ -1,41 +1,91 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
+import { SignalRService } from '../../core/signalr.service';
 import { EventsApiService } from '../../core/events-api.service';
 import { EventPriority, EventStatus, EventSummary } from '../../models/event.model';
 
-/**
- * Skeleton page: shows events currently assigned to this technician via a plain REST fetch.
- * Live push-on-assignment (SignalR when online / Web Push stub when offline) is implemented
- * server-side in INotificationService.NotifyTechnicianAsync - wiring this page to listen on
- * ClientsHub too is straightforward (same pattern as DispatcherComponent) but is not part of
- * the required E2E flow, so it is left as a follow-up rather than done here.
- */
+/** Statuses a technician is allowed to move an assigned event to, per state. */
+const TECHNICIAN_NEXT_STATUSES: Record<EventStatus, EventStatus[]> = {
+  [EventStatus.New]: [],
+  [EventStatus.Assigned]: [EventStatus.InProgress],
+  [EventStatus.InProgress]: [EventStatus.Completed],
+  [EventStatus.Completed]: [],
+  [EventStatus.Cancelled]: []
+};
+
 @Component({
   selector: 'app-technician',
   standalone: true,
-  imports: [DatePipe],
+  imports: [DatePipe, FormsModule],
   templateUrl: './technician.component.html',
   styleUrl: './technician.component.css'
 })
-export class TechnicianComponent implements OnInit {
+export class TechnicianComponent implements OnInit, OnDestroy {
   readonly EventStatus = EventStatus;
   readonly EventPriority = EventPriority;
-  readonly events = signal<EventSummary[]>([]);
+  readonly available = signal<EventSummary[]>([]);
+  private readonly commentDrafts = signal<Record<number, string>>({});
 
   constructor(
     readonly auth: AuthService,
+    readonly signalr: SignalRService,
     private readonly api: EventsApiService,
     private readonly router: Router
   ) {}
 
   ngOnInit(): void {
-    this.api.getMine().subscribe((events) => this.events.set(events));
+    this.refreshMine();
+    this.refreshAvailable();
+    this.signalr.connect();
+  }
+
+  ngOnDestroy(): void {
+    this.signalr.disconnect();
+  }
+
+  nextStatuses(status: EventStatus): EventStatus[] {
+    return TECHNICIAN_NEXT_STATUSES[status] ?? [];
+  }
+
+  claim(id: number): void {
+    this.api.claim(id).subscribe(() => {
+      this.refreshMine();
+      this.refreshAvailable();
+    });
+  }
+
+  changeStatus(id: number, newStatus: EventStatus): void {
+    this.api.changeStatus(id, newStatus).subscribe(() => this.refreshMine());
+  }
+
+  commentDraft(id: number): string {
+    return this.commentDrafts()[id] ?? '';
+  }
+
+  updateCommentDraft(id: number, text: string): void {
+    this.commentDrafts.update((drafts) => ({ ...drafts, [id]: text }));
+  }
+
+  sendComment(id: number): void {
+    const text = this.commentDraft(id).trim();
+    if (!text) return;
+
+    this.api.addComment(id, text).subscribe(() => this.updateCommentDraft(id, ''));
   }
 
   logout(): void {
     this.auth.logout();
     this.router.navigate(['/login']);
+  }
+
+  private refreshMine(): void {
+    this.api.getMine().subscribe((events) => this.signalr.seedEvents(events));
+  }
+
+  private refreshAvailable(): void {
+    this.api.getAvailable().subscribe((events) => this.available.set(events));
   }
 }

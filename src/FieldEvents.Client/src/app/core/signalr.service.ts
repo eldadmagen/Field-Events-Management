@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 
 const CLIENTS_HUB_PATH = '/hubs/clients';
 const NEW_EVENT_METHOD = 'NewEventReceived';
+const TECHNICIAN_PRESENCE_METHOD = 'TechnicianPresenceChanged';
 
 /**
  * Owns the live connection to ClientsHub - the "user is online" real-time path from the
@@ -18,6 +19,7 @@ export class SignalRService {
 
   readonly events = signal<EventSummary[]>([]);
   readonly connectionState = signal<signalR.HubConnectionState>(signalR.HubConnectionState.Disconnected);
+  readonly technicianPresence = signal<Record<number, boolean>>({});
 
   constructor(private readonly auth: AuthService) {}
 
@@ -32,7 +34,17 @@ export class SignalRService {
       .build();
 
     this.connection.on(NEW_EVENT_METHOD, (evt: EventSummary) => {
-      this.events.update((current) => [evt, ...current]);
+      this.events.update((current) => {
+        const index = current.findIndex((e) => e.id === evt.id);
+        if (index === -1) return [evt, ...current];
+        const next = [...current];
+        next[index] = evt;
+        return next;
+      });
+    });
+
+    this.connection.on(TECHNICIAN_PRESENCE_METHOD, (payload: { technicianId: number; isOnline: boolean }) => {
+      this.technicianPresence.update((current) => ({ ...current, [payload.technicianId]: payload.isOnline }));
     });
 
     this.connection.onreconnected(() => this.connectionState.set(signalR.HubConnectionState.Connected));
@@ -47,6 +59,10 @@ export class SignalRService {
 
   seedEvents(initial: EventSummary[]): void {
     this.events.set(initial);
+  }
+
+  seedTechnicianPresence(initial: Record<number, boolean>): void {
+    this.technicianPresence.update((current) => ({ ...initial, ...current }));
   }
 
   disconnect(): void {

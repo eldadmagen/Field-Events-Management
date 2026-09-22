@@ -24,3 +24,9 @@ export interface EventSummary {
   assignedTechnicianId?: number;
   createdAtUtc: string;
 }
+
+export interface TechnicianSummary {
+  id: number;
+  userName: string;
+  isOnline: boolean;
+}

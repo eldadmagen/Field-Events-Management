@@ -31,4 +31,9 @@ public class NotificationService(
             await pushChannel.SendAsync(technicianUserId, evt, ct);
         }
     }
+
+    public Task NotifyTechnicianPresenceChangedAsync(int technicianUserId, bool isOnline, CancellationToken ct = default) =>
+        hub.Clients.Group(ClientGroups.Dispatchers)
+            .SendAsync(HubRoutes.TechnicianPresenceChangedMethod,
+                new TechnicianPresenceChanged { TechnicianId = technicianUserId, IsOnline = isOnline }, ct);
 }

@@ -12,4 +12,7 @@ public interface INotificationService
     /// Not exercised by the required E2E flow, but wired end-to-end at the interface/plumbing level.
     /// </summary>
     Task NotifyTechnicianAsync(int technicianUserId, EventSummary evt, CancellationToken ct = default);
+
+    /// <summary>Broadcasts a technician's connect/disconnect to every currently-connected dispatcher, for the technician status dashboard.</summary>
+    Task NotifyTechnicianPresenceChangedAsync(int technicianUserId, bool isOnline, CancellationToken ct = default);
 }

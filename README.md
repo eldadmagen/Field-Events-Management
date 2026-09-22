@@ -112,12 +112,21 @@ dotnet test tests/FieldEvents.Server.Tests
 
 - **Fully implemented, E2E**: the flow above, JWT auth + role authorization, the Agent's local
   outbox (survives Server outages and Agent restarts), automatic reconnect, the State Machine and
-  its audit history, dispatcher assign/transfer/status/comment REST endpoints.
+  its audit history, dispatcher assign/transfer/status/priority/comment REST endpoints. The
+  Dispatcher UI can assign or transfer an event to any technician regardless of that technician's
+  connection state, change priority, and close an event (Complete/Cancel) - all pushed live over
+  `ClientsHub` to every connected dispatcher and the affected technician(s). It also shows a
+  technician status dashboard (online/offline, live via `ClientsHub` connect/disconnect ->
+  `GET /api/users/technicians` for the initial snapshot) with each technician's active events. The
+  Technician UI is wired to live SignalR push on `ClientsHub` (same pattern as the Dispatcher view),
+  shows only events assigned to that technician, can claim an unassigned event
+  (`POST /api/events/{id}/claim`), advance its status through the allowed transitions, and send a
+  comment to dispatchers.
 - **Skeleton / stub (by design - see docs/ARCHITECTURE.md)**: offline push notifications
   (`IPushNotificationChannel` / `WebPushNotificationChannel`) - the interface, DB schema
-  (`PushSubscription`) and call site are wired up, but no real Web Push delivery is implemented.
-  The Technician UI reads its assigned events over REST but isn't wired to live SignalR push
-  (the server-side notification call already exists in `NotificationService.NotifyTechnicianAsync`).
+  (`PushSubscription`) and call site are wired up, but no real Web Push delivery is implemented, so
+  a technician who is offline (browser closed) will not actually receive a push notification yet -
+  only the live in-browser SignalR path works end-to-end.
 
 ## Notes on configuration
 
