@@ -10,6 +10,8 @@ builder.Services.AddHostedService<OutboxForwarder>();
 
 var app = builder.Build();
 
+app.UseHttpsRedirection();
+
 // Generic ingestion endpoint any external source (sensor, external system, manual report tool)
 // posts to. Extending to a new source = register its id + API key in config, nothing else changes.
 app.MapPost("/ingest/{sourceId}", async (string sourceId, IncomingEventRequest request, HttpRequest http, SourceRegistry sources, OutboxStore outbox) =>

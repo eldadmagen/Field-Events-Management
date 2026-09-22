@@ -105,3 +105,18 @@ section h2 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.history-row td {
+  background: var(--color-neutral-soft);
+}
+
+.history-table {
+  min-width: 0;
+  margin: 0.25rem 0;
+}
+
+.history-table th,
+.history-table td {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+}

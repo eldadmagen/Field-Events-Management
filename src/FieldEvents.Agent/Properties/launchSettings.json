@@ -1,10 +1,18 @@
 {
   "$schema": "https://json.schemastore.org/launchsettings.json",
   "profiles": {
-    "FieldEvents.Agent": {
+    "http": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "applicationUrl": "http://localhost:5080",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
+    "https": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "applicationUrl": "https://localhost:7081;http://localhost:5080",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"
       }

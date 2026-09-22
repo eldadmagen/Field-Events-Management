@@ -53,6 +53,7 @@ section h2 {
 }
 
 .events-table {
+  min-width: 73rem;
   table-layout: fixed;
 }
 
@@ -81,4 +82,24 @@ section h2 {
 
 .available-panel th {
   color: var(--color-primary);
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.history-row td {
+  background: var(--color-neutral-soft);
+}
+
+.history-table {
+  min-width: 0;
+  margin: 0.25rem 0;
+}
+
+.history-table th,
+.history-table td {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
 }

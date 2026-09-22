@@ -51,11 +51,12 @@ Swagger UI: `https://localhost:7180/swagger`.
 ### 2. Agent
 
 ```
-dotnet run --project src/FieldEvents.Agent
+dotnet run --project src/FieldEvents.Agent --launch-profile https
 ```
 
-Listens on `http://localhost:5080` and connects out to the Server's `EventsHub`. Two demo sources
-are pre-registered in `src/FieldEvents.Agent/appsettings.json`:
+Listens on `https://localhost:7081` (also `http://localhost:5080`, redirected to https) and
+connects out to the Server's `EventsHub` over `https://localhost:7180`. Two demo sources are
+pre-registered in `src/FieldEvents.Agent/appsettings.json`:
 
 | Source ID       | API Key             |
 |------------------|----------------------|
@@ -77,7 +78,7 @@ Open `http://localhost:4200`, log in as `dispatcher1` / `Passw0rd!`.
 With Server + Agent + Client all running, simulate an external source reporting an event:
 
 ```
-curl -X POST http://localhost:5080/ingest/sensor-1 \
+curl -X POST https://localhost:7081/ingest/sensor-1 \
   -H "Content-Type: application/json" \
   -H "X-Api-Key: sensor-1-key" \
   -d '{"title":"Gas leak detected","description":"Sensor threshold exceeded on line 3","location":"Building A - Zone 3","priority":2}'
@@ -95,8 +96,8 @@ Both of these were actually run against this codebase, not just reasoned about:
 - **Server-outage resilience**: started the Agent with the Server stopped, POSTed an event (still got
   `202 Accepted` immediately), confirmed the Agent kept retrying the connection in the background,
   then started the Server - the queued event was forwarded and persisted automatically within
-  seconds, with no manual replay. This is the "outbox" design from `docs/ARCHITECTURE.md` working
-  as intended, not just described.
+  seconds, with no manual replay. This is the "outbox" design from
+  `docs/Field_Events_Architecture.docx` working as intended, not just described.
 - **Authorization**: a technician JWT against the dispatcher-only `GET /api/events` returns `403`;
   no token returns `401`.
 - Also caught and fixed a real bug this way: EF Core + SQLite cannot `ORDER BY` a `DateTimeOffset`
@@ -121,8 +122,10 @@ dotnet test tests/FieldEvents.Server.Tests
   Technician UI is wired to live SignalR push on `ClientsHub` (same pattern as the Dispatcher view),
   shows only events assigned to that technician, can claim an unassigned event
   (`POST /api/events/{id}/claim`), advance its status through the allowed transitions, and send a
-  comment to dispatchers.
-- **Skeleton / stub (by design - see docs/ARCHITECTURE.md)**: offline push notifications
+  comment to dispatchers. Every channel is encrypted: Client↔Server (HTTPS), Agent↔Server
+  (SignalR over HTTPS/WSS), and external source↔Agent (the `/ingest/{sourceId}` endpoint now has
+  an `https` launch profile with `UseHttpsRedirection`, same as the Server).
+- **Skeleton / stub (by design - see docs/Field_Events_Architecture.docx)**: offline push notifications
   (`IPushNotificationChannel` / `WebPushNotificationChannel`) - the interface, DB schema
   (`PushSubscription`) and call site are wired up, but no real Web Push delivery is implemented, so
   a technician who is offline (browser closed) will not actually receive a push notification yet -

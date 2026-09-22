@@ -31,3 +31,12 @@ export interface TechnicianSummary {
   userName: string;
   isOnline: boolean;
 }
+
+export interface EventStatusHistoryEntry {
+  id: number;
+  fieldEventId: number;
+  fromStatus: EventStatus;
+  toStatus: EventStatus;
+  changedByUserId?: number;
+  changedAtUtc: string;
+}

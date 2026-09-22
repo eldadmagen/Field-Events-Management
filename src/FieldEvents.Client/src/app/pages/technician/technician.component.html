@@ -14,18 +14,18 @@
         <col style="width: auto;">
         <col style="width: 7rem;">
         <col style="width: 7rem;">
-        <col style="width: 9rem;">
         <col style="width: 22rem;">
         <col style="width: 9rem;">
+        <col style="width: 6rem;">
       </colgroup>
       <thead>
         <tr>
           <th>Title</th>
           <th>Priority</th>
           <th>Status</th>
-          <th>Created</th>
           <th>Comment to dispatcher</th>
           <th>Update status</th>
+          <th>History</th>
         </tr>
       </thead>
       <tbody>
@@ -34,7 +34,6 @@
             <td>{{ evt.title }}</td>
             <td><span [class]="'badge priority-' + evt.priority">{{ EventPriority[evt.priority] }}</span></td>
             <td><span [class]="'badge status-' + evt.status">{{ EventStatus[evt.status] }}</span></td>
-            <td>{{ evt.createdAtUtc | date: 'short' }}</td>
             <td class="comment-cell">
               <input
                 type="text"
@@ -54,7 +53,40 @@
                 </button>
               }
             </td>
+            <td><button class="btn-ghost" (click)="toggleHistory(evt.id)">
+              {{ openHistoryEventId() === evt.id ? 'Hide' : 'History' }}
+            </button></td>
           </tr>
+          @if (openHistoryEventId() === evt.id) {
+            <tr class="history-row">
+              <td colspan="6">
+                @if (historyEntries().length === 0) {
+                  <span class="hint">No status changes recorded yet.</span>
+                } @else {
+                  <table class="history-table">
+                    <thead>
+                      <tr>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>Changed by</th>
+                        <th>When</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (entry of historyEntries(); track entry.id) {
+                        <tr>
+                          <td>{{ EventStatus[entry.fromStatus] }}</td>
+                          <td>{{ EventStatus[entry.toStatus] }}</td>
+                          <td>{{ changedByName(entry.changedByUserId) }}</td>
+                          <td>{{ entry.changedAtUtc | date: 'short' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                }
+              </td>
+            </tr>
+          }
         } @empty {
           <tr>
             <td colspan="6">No events assigned to you yet.</td>

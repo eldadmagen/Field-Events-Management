@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { SignalRService } from '../../core/signalr.service';
 import { EventsApiService } from '../../core/events-api.service';
-import { EventPriority, EventStatus, EventSummary } from '../../models/event.model';
+import { EventPriority, EventStatus, EventStatusHistoryEntry, EventSummary } from '../../models/event.model';
 
 /** Statuses a technician is allowed to move an assigned event to, per state. */
 const TECHNICIAN_NEXT_STATUSES: Record<EventStatus, EventStatus[]> = {
@@ -28,6 +28,8 @@ export class TechnicianComponent implements OnInit, OnDestroy {
   readonly EventPriority = EventPriority;
   readonly available = signal<EventSummary[]>([]);
   private readonly commentDrafts = signal<Record<number, string>>({});
+  readonly openHistoryEventId = signal<number | null>(null);
+  readonly historyEntries = signal<EventStatusHistoryEntry[]>([]);
 
   constructor(
     readonly auth: AuthService,
@@ -74,6 +76,21 @@ export class TechnicianComponent implements OnInit, OnDestroy {
     if (!text) return;
 
     this.api.addComment(id, text).subscribe(() => this.updateCommentDraft(id, ''));
+  }
+
+  toggleHistory(id: number): void {
+    if (this.openHistoryEventId() === id) {
+      this.openHistoryEventId.set(null);
+      return;
+    }
+    this.api.getHistory(id).subscribe((entries) => {
+      this.historyEntries.set(entries);
+      this.openHistoryEventId.set(id);
+    });
+  }
+
+  changedByName(userId?: number): string {
+    return userId == null ? 'System' : `User #${userId}`;
   }
 
   logout(): void {

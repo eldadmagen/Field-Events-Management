@@ -24,6 +24,7 @@
         <th>Assign / Transfer</th>
         <th>Close</th>
         <th>Comments</th>
+        <th>History</th>
       </tr>
     </thead>
     <tbody>
@@ -68,10 +69,43 @@
             }
           </td>
           <td class="comments-cell">{{ evt.latestComment || '-' }}</td>
+          <td><button class="btn-ghost" (click)="toggleHistory(evt.id)">
+            {{ openHistoryEventId() === evt.id ? 'Hide' : 'History' }}
+          </button></td>
         </tr>
+        @if (openHistoryEventId() === evt.id) {
+          <tr class="history-row">
+            <td colspan="8">
+              @if (historyEntries().length === 0) {
+                <span class="hint">No status changes recorded yet.</span>
+              } @else {
+                <table class="history-table">
+                  <thead>
+                    <tr>
+                      <th>From</th>
+                      <th>To</th>
+                      <th>Changed by</th>
+                      <th>When</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (entry of historyEntries(); track entry.id) {
+                      <tr>
+                        <td>{{ EventStatus[entry.fromStatus] }}</td>
+                        <td>{{ EventStatus[entry.toStatus] }}</td>
+                        <td>{{ changedByName(entry.changedByUserId) }}</td>
+                        <td>{{ entry.changedAtUtc | date: 'short' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </td>
+          </tr>
+        }
       } @empty {
         <tr>
-          <td colspan="7">No events yet.</td>
+          <td colspan="8">No events yet.</td>
         </tr>
       }
     </tbody>

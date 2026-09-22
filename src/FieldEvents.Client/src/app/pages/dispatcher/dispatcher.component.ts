@@ -1,10 +1,11 @@
 import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { SignalRService } from '../../core/signalr.service';
 import { EventsApiService } from '../../core/events-api.service';
-import { EventPriority, EventStatus, EventSummary, TechnicianSummary } from '../../models/event.model';
+import { EventPriority, EventStatus, EventStatusHistoryEntry, EventSummary, TechnicianSummary } from '../../models/event.model';
 
 /** Statuses a dispatcher can directly close an event into, per current state (see EventStateMachine.cs). */
 const DISPATCHER_CLOSE_STATUSES: Record<EventStatus, EventStatus[]> = {
@@ -25,7 +26,7 @@ interface TechnicianRow extends TechnicianSummary {
 @Component({
   selector: 'app-dispatcher',
   standalone: true,
-  imports: [FormsModule],
+  imports: [DatePipe, FormsModule],
   templateUrl: './dispatcher.component.html',
   styleUrl: './dispatcher.component.css'
 })
@@ -36,6 +37,8 @@ export class DispatcherComponent implements OnInit, OnDestroy {
 
   readonly technicians = signal<TechnicianSummary[]>([]);
   private readonly technicianPicks = signal<Record<number, number | null>>({});
+  readonly openHistoryEventId = signal<number | null>(null);
+  readonly historyEntries = signal<EventStatusHistoryEntry[]>([]);
 
   readonly technicianRows = computed<TechnicianRow[]>(() => {
     const presence = this.signalr.technicianPresence();
@@ -108,6 +111,22 @@ export class DispatcherComponent implements OnInit, OnDestroy {
 
   changeStatus(eventId: number, newStatus: EventStatus): void {
     this.api.changeStatus(eventId, newStatus).subscribe();
+  }
+
+  toggleHistory(eventId: number): void {
+    if (this.openHistoryEventId() === eventId) {
+      this.openHistoryEventId.set(null);
+      return;
+    }
+    this.api.getHistory(eventId).subscribe((entries) => {
+      this.historyEntries.set(entries);
+      this.openHistoryEventId.set(eventId);
+    });
+  }
+
+  changedByName(userId?: number): string {
+    if (userId == null) return 'System';
+    return this.technicians().find((t) => t.id === userId)?.userName ?? `User #${userId}`;
   }
 
   logout(): void {
