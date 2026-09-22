@@ -2,80 +2,89 @@
   <h1>My events</h1>
   <div class="header-right">
     <span>{{ auth.userName() }}</span>
-    <button (click)="logout()">Log out</button>
+    <button class="btn-ghost" (click)="logout()">Log out</button>
   </div>
 </header>
 
 <section>
   <h2>My events</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Title</th>
-        <th>Priority</th>
-        <th>Status</th>
-        <th>Created</th>
-        <th>Update status</th>
-        <th>Comment to dispatcher</th>
-      </tr>
-    </thead>
-    <tbody>
-      @for (evt of signalr.events(); track evt.id) {
+  <div class="panel">
+    <table>
+      <thead>
         <tr>
-          <td>{{ evt.title }}</td>
-          <td>{{ EventPriority[evt.priority] }}</td>
-          <td>{{ EventStatus[evt.status] }}</td>
-          <td>{{ evt.createdAtUtc | date: 'short' }}</td>
-          <td>
-            @for (next of nextStatuses(evt.status); track next) {
-              <button (click)="changeStatus(evt.id, next)">{{ EventStatus[next] }}</button>
-            }
-          </td>
-          <td class="comment-cell">
-            <input
-              type="text"
-              placeholder="Update for dispatcher..."
-              [ngModel]="commentDraft(evt.id)"
-              (ngModelChange)="updateCommentDraft(evt.id, $event)"
-            />
-            <button (click)="sendComment(evt.id)">Send</button>
-          </td>
+          <th>Title</th>
+          <th>Priority</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Update status</th>
+          <th>Comment to dispatcher</th>
         </tr>
-      } @empty {
-        <tr>
-          <td colspan="6">No events assigned to you yet.</td>
-        </tr>
-      }
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        @for (evt of signalr.events(); track evt.id) {
+          <tr>
+            <td>{{ evt.title }}</td>
+            <td><span [class]="'badge priority-' + evt.priority">{{ EventPriority[evt.priority] }}</span></td>
+            <td><span [class]="'badge status-' + evt.status">{{ EventStatus[evt.status] }}</span></td>
+            <td>{{ evt.createdAtUtc | date: 'short' }}</td>
+            <td class="status-cell">
+              @for (next of nextStatuses(evt.status); track next) {
+                <button
+                  [class.btn-success]="next === EventStatus.Completed"
+                  (click)="changeStatus(evt.id, next)"
+                >
+                  {{ EventStatus[next] }}
+                </button>
+              }
+            </td>
+            <td class="comment-cell">
+              <input
+                type="text"
+                placeholder="Update for dispatcher..."
+                [ngModel]="commentDraft(evt.id)"
+                (ngModelChange)="updateCommentDraft(evt.id, $event)"
+              />
+              <button (click)="sendComment(evt.id)">Send</button>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="6">No events assigned to you yet.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
 </section>
 
 <section>
   <h2>Available events</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Title</th>
-        <th>Priority</th>
-        <th>Location</th>
-        <th>Created</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      @for (evt of available(); track evt.id) {
+  <div class="panel available-panel">
+    <table>
+      <thead>
         <tr>
-          <td>{{ evt.title }}</td>
-          <td>{{ EventPriority[evt.priority] }}</td>
-          <td>{{ evt.location }}</td>
-          <td>{{ evt.createdAtUtc | date: 'short' }}</td>
-          <td><button (click)="claim(evt.id)">Claim</button></td>
+          <th>Title</th>
+          <th>Priority</th>
+          <th>Location</th>
+          <th>Created</th>
+          <th></th>
         </tr>
-      } @empty {
-        <tr>
-          <td colspan="5">No available events right now.</td>
-        </tr>
-      }
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        @for (evt of available(); track evt.id) {
+          <tr>
+            <td>{{ evt.title }}</td>
+            <td><span [class]="'badge priority-' + evt.priority">{{ EventPriority[evt.priority] }}</span></td>
+            <td>{{ evt.location }}</td>
+            <td>{{ evt.createdAtUtc | date: 'short' }}</td>
+            <td><button class="btn-success" (click)="claim(evt.id)">Claim</button></td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="5">No available events right now.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
 </section>

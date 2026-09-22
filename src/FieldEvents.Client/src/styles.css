@@ -1,1 +1,256 @@
-/* You can add global styles to this file, and also import other style files */
+/* Global design tokens + base element styling shared by every page. Angular's emulated view
+   encapsulation only scopes component styles, not this file, so element/class rules written here
+   apply app-wide - component CSS files only need to add page-specific layout on top of this. */
+
+:root {
+  color-scheme: light;
+
+  --color-bg: #f3f5fb;
+  --color-surface: #ffffff;
+  --color-border: #e3e6ef;
+  --color-text: #1f2433;
+  --color-text-muted: #6b7280;
+
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
+  --color-primary-soft: #eef0ff;
+
+  --color-success: #15803d;
+  --color-success-soft: #dcfce7;
+  --color-warning: #b45309;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fee2e2;
+  --color-neutral: #475569;
+  --color-neutral-soft: #eef1f6;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --shadow-sm: 0 1px 2px rgba(23, 27, 46, 0.06);
+  --shadow-md: 0 10px 30px rgba(23, 27, 46, 0.08);
+
+  --font-sans: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+/* Buttons */
+
+button {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: var(--color-primary);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease, transform 0.05s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.btn-ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+
+button.btn-ghost:hover:not(:disabled) {
+  background: var(--color-neutral-soft);
+  color: var(--color-text);
+}
+
+button.btn-success {
+  background: var(--color-success);
+}
+
+button.btn-success:hover:not(:disabled) {
+  background: #14632f;
+}
+
+button.btn-danger {
+  background: var(--color-danger);
+}
+
+button.btn-danger:hover:not(:disabled) {
+  background: #991616;
+}
+
+/* Inputs & selects */
+
+input,
+select {
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+/* Tables */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+td {
+  text-align: left;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.9rem;
+  vertical-align: middle;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr:hover {
+  background: var(--color-neutral-soft);
+}
+
+/* Status/priority pills - class is built as "badge status-<n>" / "badge priority-<n>" in templates */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--color-neutral-soft);
+  color: var(--color-neutral);
+  white-space: nowrap;
+}
+
+.badge.priority-0 {
+  background: var(--color-neutral-soft);
+  color: var(--color-neutral);
+}
+
+.badge.priority-1 {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.badge.priority-2 {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.badge.priority-3 {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.badge.status-0 {
+  background: var(--color-neutral-soft);
+  color: var(--color-neutral);
+}
+
+.badge.status-1,
+.badge.status-2 {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.badge.status-3 {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.badge.status-4 {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+/* Presence pill - reused for connection state and technician online/offline */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  background: var(--color-neutral-soft);
+  color: var(--color-text-muted);
+}
+
+.status-pill::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+}
+
+.status-pill.online {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
